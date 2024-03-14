@@ -17,44 +17,62 @@ type Object struct {
 }
 
 func Add(store KVStore, node Node, h hash.Hash) []byte {
-	// TODO 将分片写入到KVStore中，并返回Merkle Root
+	var obj *Object
 
-	var object Object
+	if node.Type() == FILE {
+		file := node.(File)
+		obj = StoreFile(store, file, h)
+	} else if node.Type() == DIR {
+		dir := node.(Dir)
+		obj = StoreDir(store, dir, h)
+	}
 
-	if node.Type() == FILE { // 处理文件节点
-		fileNode := node.(File)
-		object.Data = fileNode.Bytes()
-	} else if node.Type() == DIR { // 处理目录节点
-		dirNode := node.(Dir)
-		it := dirNode.It()
+	jsonMarshal, _ := json.Marshal(obj)
+	hash := calculateHash(jsonMarshal)
+	store.Put(hash, jsonMarshal)
 
-		for it.Next() {
-			childNode := it.Node()
-			// 递归
-			childHash := Add(store, childNode, h)
-			object.Links = append(object.Links, Link{
-				Name: childNode.Name(),
-				Hash: childHash,
-				Size: int(childNode.Size()),
+	return hash
+}
+
+func calculateHash(data []byte) []byte {
+	h := sha256.New()
+	h.Write(data)
+	return h.Sum(nil)
+}
+
+func StoreFile(store KVStore, file File, h hash.Hash) *Object {
+	if len(file.Bytes()) <= 256*1024 {
+		data := file.Bytes()
+		blob := Object{Data: data, Links: nil}
+		return &blob
+	}
+
+	// Implement chunking logic for large files here
+}
+
+func StoreDir(store KVStore, dir Dir, h hash.Hash) *Object {
+	it := dir.It()
+	treeObject := &Object{}
+	for it.Next() {
+		n := it.Node()
+		switch n.Type() {
+		case FILE:
+			file := n.(File)
+			tmp := StoreFile(store, file, h)
+			treeObject.Links = append(treeObject.Links, Link{
+				Hash: calculateHash(json.Marshal(tmp)),
+				Size: int(file.Size()),
+				Name: file.Name(),
+			})
+		case DIR:
+			dir := n.(Dir)
+			tmp := StoreDir(store, dir, h)
+			treeObject.Links = append(treeObject.Links, Link{
+				Hash: calculateHash(json.Marshal(tmp)),
+				Size: int(dir.Size()),
+				Name: dir.Name(),
 			})
 		}
 	}
-
-	// 序列化对象
-	objectBytes, err := json.Marshal(object)
-	if err != nil {
-		panic(err) // 处理错误
-	}
-
-	// 计算哈希
-	h.Reset()
-	h.Write(objectBytes)
-	hashBytes := h.Sum(nil)
-
-	// 存储对象: Key是hash，value是我们存储的节点对象
-	if err := store.Put(hashBytes, objectBytes); err != nil {
-		panic(err) // 处理错误
-	}
-
-	return hashBytes
+	return treeObject
 }
