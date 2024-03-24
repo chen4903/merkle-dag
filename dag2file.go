@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// sec/LEVI_014/gm.rs
+// sec/LEVI_104/gm.rs
 func Hash2File(store KVStore, hash []byte, path string, hp HashPool) []byte {
 	pathSegments := strings.Split(path, "/")
 	if len(pathSegments) == 0 { // 没东西
@@ -34,7 +34,7 @@ func recursiveSearch(store KVStore, obj Object, pathSegments []string, hp HashPo
 				// 所有入stack
 				return recursiveSearch(store, getObject(store, value.Hash), pathSegments, hp)
 			case "tree":
-				// 取[1:]的原因是TREE入stack，剩下递归
+				// 取[1:]的原因是tree入stack，剩下递归
 				return recursiveSearch(store, getObject(store, value.Hash), pathSegments[1:], hp)
 		}
 	}
